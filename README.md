@@ -33,6 +33,7 @@
 - [Model Evaluation](#-model-evaluation)
   - [Confusion Matrices](#confusion-matrices)
   - [Scoring Formula](#scoring-formula)
+  - [MSE and MAE](#mse-and-mae)
   - [Error Percentage](#error-percentage)
 - [Configuration](#-configuration)
 - [Troubleshooting](#-troubleshooting)
@@ -330,6 +331,39 @@ $$
 where $N$ is the number of evaluated COCO classes and $AP_i$ is the average
 precision for class $i$. `mAP@0.50` uses an IoU threshold of 0.50, while
 `mAP@0.50:0.95` averages IoU thresholds from 0.50 through 0.95.
+
+### MSE and MAE
+
+Mean Squared Error (MSE) and Mean Absolute Error (MAE) can be used when
+VisionMate is evaluated with numerical prediction values and corresponding
+ground-truth values:
+
+$$
+\text{MSE} = \frac{1}{n}\sum_{i=1}^{n}(y_i-\hat{y}_i)^2
+$$
+
+$$
+\text{MAE} = \frac{1}{n}\sum_{i=1}^{n}|y_i-\hat{y}_i|
+$$
+
+Here, $y_i$ is the expected value and $\hat{y}_i$ is the model-predicted value.
+For YOLO object detection, these formulas are mainly appropriate for
+regression-style outputs such as bounding-box coordinates or distance estimates.
+MSE penalizes large errors more strongly because the squared differences give
+greater weight to outliers.
+
+Using the baseline-to-fine-tuned changes in mAP@0.50, mAP@0.50:0.95,
+precision, and recall as four numerical observations:
+
+| Model | MAE | MSE |
+|---|---:|---:|
+| YOLO11n | 0.0111 (1.11 percentage points) | 0.000210 (2.10 percentage-points squared) |
+| YOLO26n | 0.0347 (3.47 percentage points) | 0.002410 (24.10 percentage-points squared) |
+
+These MSE/MAE values summarize the aggregate metric changes reported by the
+fine-tuning experiments. They are **not YOLO bounding-box or per-sample
+detection errors**, because the raw continuous target/prediction arrays are
+not stored in the generated result summary.
 
 ### Error Percentage
 
