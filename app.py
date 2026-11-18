@@ -30,36 +30,19 @@ from assistant.speech import SpeechAnnouncer
 
 def find_working_camera():
     """
-    Test camera indices with DirectShow (CAP_DSHOW) on Windows, falling back to default.
-    Returns the first working VideoCapture object and index.
+    Test camera indices 0, 1, 2, 3 in sequence and return the first working VideoCapture.
     """
-    backends = []
-    if sys.platform == "win32":
-        backends = [(cv2.CAP_DSHOW, "DirectShow"), (cv2.CAP_ANY, "Default")]
-    else:
-        backends = [(cv2.CAP_ANY, "Default")]
-
-    for backend, backend_name in backends:
-        for index in [0, 1, 2, 3]:
-            print(f"Testing camera index {index} with {backend_name}...")
-            cap = cv2.VideoCapture(index, backend)
-            if cap.isOpened():
-                ret, frame = cap.read()
-                if ret and frame is not None and frame.size > 0:
-                    # Attempt 720p upgrade, but keep camera even if 720p isn't supported
-                    cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
-                    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
-                    ret2, frame2 = cap.read()
-                    if not ret2 or frame2 is None or frame2.size == 0:
-                        # Revert to standard resolution if 720p caused issue
-                        cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
-                        cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
-
-                    actual_w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-                    actual_h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-                    print(f"--> Camera ready on index {index} ({backend_name}) at {actual_w}x{actual_h}")
-                    return cap, index
-                cap.release()
+    for index in [0, 1, 2, 3]:
+        print(f"Testing camera index: {index}...")
+        cap = cv2.VideoCapture(index)
+        if cap.isOpened():
+            cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
+            cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
+            ret, frame = cap.read()
+            if ret and frame is not None and frame.size > 0:
+                print(f"--> Using camera index: {index}")
+                return cap, index
+            cap.release()
     return None, -1
 
 
@@ -186,25 +169,20 @@ def input_listener(command_queue: queue.Queue, is_running: list):
     google_recognizer.obtain_transcription = obtain_transcription_with_closed_response
 
     recognizer = sr.Recognizer()
-    recognizer.pause_threshold = 0.5
+    recognizer.pause_threshold = 0.8
+    command_listen_seconds = 6
+    command_cooldown_seconds = 3.0
     input_device = sd.default.device[0]
     device_info = sd.query_devices(input_device, "input")
     sample_rate = int(device_info["default_samplerate"])
     recognition_failures = 0
-
-    chunk_seconds = 0.25
-    chunk_samples = int(sample_rate * chunk_seconds)
-    energy_threshold = 280
-    silence_threshold_chunks = 2  # ~0.5s silence to finalize speech
-    max_recording_chunks = 16     # max 4.0s of continuous speech per utterance
-
-    print(f"[Voice] Using microphone: {device_info['name']} at {sample_rate} Hz (Low-Latency VAD Mode)")
+    print(f"[Voice] Using microphone: {device_info['name']} at {sample_rate} Hz")
 
     while is_running[0]:
         try:
-            # 1. Listen for voice activity in 250ms chunks
-            chunk = sd.rec(
-                chunk_samples,
+            print("[Voice] Listening...")
+            audio_bytes = sd.rec(
+                int(sample_rate * command_listen_seconds),
                 samplerate=sample_rate,
                 channels=1,
                 dtype="int16",
@@ -212,69 +190,37 @@ def input_listener(command_queue: queue.Queue, is_running: list):
             )
             sd.wait()
 
-            audio_level = float(np.sqrt(np.mean(np.square(chunk.astype(np.float32)))))
-            if audio_level < energy_threshold:
+            audio_level = float(np.sqrt(np.mean(np.square(audio_bytes.astype(np.float32)))))
+            if audio_level < 300:
                 continue
 
-            # Voice activity detected! Buffer speech until user pauses
-            speech_chunks = [chunk]
-            silence_chunks = 0
-
-            while is_running[0] and len(speech_chunks) < max_recording_chunks:
-                next_chunk = sd.rec(
-                    chunk_samples,
-                    samplerate=sample_rate,
-                    channels=1,
-                    dtype="int16",
-                    device=input_device,
-                )
-                sd.wait()
-
-                level = float(np.sqrt(np.mean(np.square(next_chunk.astype(np.float32)))))
-                speech_chunks.append(next_chunk)
-
-                if level < energy_threshold:
-                    silence_chunks += 1
-                    if silence_chunks >= silence_threshold_chunks:
-                        # User stopped speaking, process immediately
-                        break
-                else:
-                    silence_chunks = 0
-
-            if len(speech_chunks) < 2:
-                continue
-
-            combined_audio = np.concatenate(speech_chunks, axis=0)
             audio = sr.AudioData(
-                combined_audio.tobytes(),
+                audio_bytes.tobytes(),
                 sample_rate,
                 2,
             )
-
             command = recognizer.recognize_google(audio, language="en-US").strip()
             recognition_failures = 0
             if command:
                 print(f"[Voice Command Received] '{command}'")
                 command_queue.put(command)
-
-                # If it's a stop command, no cooldown delay needed!
-                cmd_lower = command.lower()
-                is_stop = any(w in cmd_lower for w in ["stop", "quiet", "silence", "shut up", "pause"])
-                if not is_stop:
-                    time.sleep(1.0)
+                time.sleep(command_cooldown_seconds)
         except sr.WaitTimeoutError:
             continue
         except sr.UnknownValueError:
             recognition_failures = 0
+            print("[Voice] Could not understand the audio.")
             continue
         except sr.RequestError as exc:
             recognition_failures += 1
-            retry_delay = min(15, 2 ** min(recognition_failures, 3))
-            print(f"Voice service unavailable: {exc}. Retrying in {retry_delay}s.")
+            retry_delay = min(30, 2 ** min(recognition_failures, 4))
+            print(
+                f"Voice recognition service unavailable: {exc}. "
+                f"Retrying in {retry_delay} seconds."
+            )
             time.sleep(retry_delay)
         except Exception as exc:
             print(f"[Voice] Microphone error: {exc}")
-            time.sleep(0.5)
 
 
 def render_obstacle_overlay(frame, warning: dict):
@@ -494,16 +440,9 @@ def main():
             try:
                 cmd_text = command_queue.get_nowait()
                 if cmd_text:
-                    cmd_clean = cmd_text.strip().lower()
-                    # Check if stop/quiet was requested (e.g. "stop", "stop talking", "please stop", "be quiet")
-                    is_stop_cmd = (
-                        cmd_clean in {"stop", "stop it", "be quiet", "quiet", "silence", "shut up", "pause", "mute"}
-                        or cmd_clean.startswith("stop")
-                        or "stop talking" in cmd_clean
-                        or "be quiet" in cmd_clean
-                    )
-                    if is_stop_cmd:
-                        print(f"\n[Voice] Stop command received — muting narration immediately.")
+                    # --- STOP COMMAND: silence everything until next query ---
+                    if cmd_text.strip().lower() in {"stop", "stop it", "be quiet", "quiet", "silence", "shut up", "pause"}:
+                        print(f"\n[Voice] Stop command received — muting narration.")
                         speech.mute()
                         active_response = ""
                     else:
@@ -521,14 +460,11 @@ def main():
                 draw_track_label(frame, t)
 
             # G. Top-Left Header Box
-            cv2.rectangle(frame, (10, 10), (220, 95), (0, 0, 0), -1)
-            cv2.rectangle(frame, (10, 10), (220, 95), (0, 255, 0), 1)
+            cv2.rectangle(frame, (10, 10), (220, 75), (0, 0, 0), -1)
+            cv2.rectangle(frame, (10, 10), (220, 75), (0, 255, 0), 1)
             cv2.putText(frame, "VisionMate App", (20, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
             cv2.putText(frame, f"FPS: {fps:.1f}", (20, 50), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 1)
             cv2.putText(frame, f"Objects: {len(current_detections)}", (20, 67), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 255), 1)
-            status_text = "MUTED (speak to wake)" if getattr(speech, "_muted", False) else "Voice: Active"
-            status_color = (0, 0, 255) if getattr(speech, "_muted", False) else (0, 255, 0)
-            cv2.putText(frame, status_text, (20, 84), cv2.FONT_HERSHEY_SIMPLEX, 0.45, status_color, 1)
 
             # H. Top-Right Obstacle Warning & Bottom Assistant Response Overlays
             if obstacle_warnings:
@@ -545,10 +481,6 @@ def main():
             if key == ord('q') or key == ord('Q') or key == 27:  # 27 = ESC
                 print("\nExit key pressed. Stopping VisionMate...")
                 break
-            if key == ord('s') or key == ord('S') or key == 32:  # 's', 'S', or SPACE
-                print("\n[Instant Mute] Silence requested via keyboard.")
-                speech.mute()
-                active_response = ""
             if key == ord('f') or key == ord('F'):
                 fullscreen = not fullscreen
                 cv2.setWindowProperty(
