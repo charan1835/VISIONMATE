@@ -3,6 +3,19 @@ __pycache__/
 *.py[cod]
 *$py.class
 
+# Virtual Environments
+venv/
+.venv/
+env/
+ENV/
+env.bak/
+venv.bak/
+
+# Environment variables & secrets
+.env
+.env.*
+!.env.example
+
 # Caches
 *.cache
 *.cache.npy
@@ -23,6 +36,10 @@ datasets/zips/
 .idea/
 *.swp
 *.swo
+
+# Temporary / Scratch
+scratch/
+0.5.12
 
 # OS generated files
 Thumbs.db
