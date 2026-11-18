@@ -11,13 +11,14 @@ A structured engineering roadmap and work breakdown structure for the **VisionMa
 |                                    VISIONMATE CAPSTONE TEAM                                        |
 +------------------------------------+-----------------------------------+---------------------------+
 | CHARAN (Member 1 / You)            | SHREYA (Member 2)                 | CHIRU (Member 3)          |
-| Interaction & Recognition Lead     | Data Engineering & Pipeline Lead  | CV Detection & Tuning Lead|
+| Interaction & Recognition Lead     | Data Collection & Fine-Tuning Lead| CV Detection & Pipeline   |
 +------------------------------------+-----------------------------------+---------------------------+
-| • Object Recognition & Recovery    | • Assistive Data Collection       | • YOLO Object Detection   |
-| • 2D Spatial & Proximity Engine    | • Annotation & Dataset Labeling   | • Custom Model Fine-Tuning|
-| • Speech-to-Text (STT) Commands    | • Data Augmentation Pipeline      | • Model Export & Quantize |
-| • Text-to-Speech (TTS) Narration   | • Preprocessing & Split Scripts   | • ByteTrack Integration   |
-| • Assistant Controller & Memory    | • Data QA & Version Control       | • Latency & mAP Benchmarks|
+| • Object Recognition & Recovery    | • Assistive Data Collection       | • Object Detection Core   |
+| • 2D Spatial & Proximity Engine    | • Annotation Guidelines & Labeling| • Automated Data Pipeline |
+| • Speech-to-Text (STT) Commands    | • Transfer Learning & Fine-Tuning | • Preprocessing & Augment |
+| • Text-to-Speech (TTS) Narration   | • Hyperparameter Optimization     | • Train / Val / Test Split|
+| • Assistant Controller & Memory    | • Validation Loss & mAP Curves    | • ByteTrack Configuration |
+| • System Orchestration (app.py)    | • Hard-Example Mining             | • Quantization & Export   |
 +------------------------------------+-----------------------------------+---------------------------+
 ```
 
@@ -29,7 +30,7 @@ A structured engineering roadmap and work breakdown structure for the **VisionMa
 * **Primary Scope**: What the visually impaired user experiences — seeing, continuous object identification, spatial understanding, and hands-free voice dialogue.
 * **Key Tasks**:
   1. **Object Recognition & Identity Recovery**:
-     - Lead `TrackRecoveryManager` (`detection/recovery.py`): continuous ID recovery across sudden camera rotations, arm movements, and occlusions using motion vectors and scale ratios.
+     - Maintain `TrackRecoveryManager` (`detection/recovery.py`): continuous ID recovery across sudden camera rotations, arm movements, and occlusions using motion vectors, velocity, and scale ratios.
      - Implement `TemporalDetectionStabilizer` (`detection/stability.py`): 8-frame missing track hold and 3-frame class label smoothing to eliminate visual flicker.
   2. **Spatial Perception & Proximity Engine**:
      - Fine-tune the 3x3 2D spatial grid (`spatial/position.py`) for natural verbal directions (*"upper left"*, *"center"*).
@@ -45,65 +46,75 @@ A structured engineering roadmap and work breakdown structure for the **VisionMa
 
 ---
 
-### 👤 **Shreya — Data Engineering & Dataset Pipeline Lead**
-* **Primary Scope**: Everything that powers and fuels the AI models — data gathering, labeling, cleaning, augmentations, and automated pipelines.
+### 👤 **Shreya — Data Collection & Model Fine-Tuning Lead**
+* **Primary Scope**: Sourcing real-world assistive visual data and training the deep learning model to accurately identify objects in low-vision scenarios.
 * **Key Tasks**:
   1. **Assistive Scenario Data Collection**:
-     - Source and compile indoor/outdoor assistive datasets (e.g., chairs, tables, doors, curbs, steps, white canes, pedestrians, dropped personal items like keys/phones).
+     - Source and compile indoor/outdoor assistive datasets (chairs, tables, doors, curbs, steps, white canes, pedestrians, dropped personal items like keys/phones).
      - Record custom video clips under realistic conditions: handheld and body-worn camera movement, low light, motion blur, and partial occlusions.
-  2. **Data Annotation & Standardization**:
-     - Define standardized labeling conventions in YOLO format (`<class_id> <x_center> <y_center> <width> <height>`).
-     - Standardize class naming ontology across public datasets and custom recordings.
-     - Conduct annotation quality control (fixing tight bounding boxes, handling missing tags).
-  3. **Automated Data Pipeline & Augmentations**:
-     - Build automated Python ingestion scripts (`datasets/scripts/prepare_data.py`).
-     - Implement assistive-specific data augmentations (simulated camera shake, illumination shifts, partial synthetic occlusions) using Albumentations / OpenCV.
-     - Generate verified train/val/test splits (70% train, 20% val, 10% test) ensuring no video-frame leakage across splits.
-  4. **Dataset Documentation & Reporting**:
-     - Document dataset statistics, class balance histograms, and annotation guidelines for the capstone final report.
+  2. **Dataset Annotation & Quality Control**:
+     - Establish labeling guidelines in standard YOLO format (`<class_id> <x_center> <y_center> <width> <height>`).
+     - Label custom assistive video frames and perform QA to ensure tight, accurate bounding boxes.
+  3. **Model Fine-Tuning & Transfer Learning**:
+     - Fine-tune YOLO models (`yolo11n`, `yolo26n`) using PyTorch and Ultralytics on the curated dataset provided by Chiru's pipeline.
+     - Optimize training hyperparameters: learning rate schedulers, weight decay, anchor settings, loss balance (box, class, DFL).
+     - Prevent overfitting with frozen backbone layers and targeted fine-tuning on custom assistive classes.
+  4. **Validation & Training Performance Tracking**:
+     - Monitor training/validation loss curves, mAP@0.5, and mAP@0.5:0.95 across training epochs.
+     - Perform hard-example mining: identify misclassified instances to guide targeted data retraining.
 
 ---
 
-### 👤 **Chiru — Computer Vision Detection & Model Fine-Tuning Lead**
-* **Primary Scope**: The vision core — model selection, transfer learning, fine-tuning, tracking integration, and edge inference optimization.
+### 👤 **Chiru — Computer Vision Detection, Data Pipeline & Optimization Lead**
+* **Primary Scope**: Core detection architectures, automated data transformation pipelines, tracking integration, and edge model optimization.
 * **Key Tasks**:
-  1. **Model Selection & Baseline Benchmarking**:
-     - Benchmark pre-trained YOLO architectures (`yolo11n`, `yolo11s`, `yolo26n`) on baseline metrics (FPS, inference latency on CPU vs. GPU, mAP@0.5, mAP@0.5:0.95).
-  2. **Model Fine-Tuning & Transfer Learning**:
-     - Set up the PyTorch / Ultralytics fine-tuning pipeline using Shreya's prepared dataset.
-     - Optimize training hyperparameters: learning rate schedulers, weight decay, anchor optimization, loss weights (box loss, class loss, DFL loss).
-     - Mitigate overfitting on smaller custom classes using frozen backbone layers and targeted fine-tuning.
+  1. **Object Detection Core & Baseline Benchmarking**:
+     - Set up and benchmark baseline YOLO architectures (`yolo11n`, `yolo26n`) on inference latency (CPU vs. GPU) and memory usage.
+  2. **Automated Data Pipeline & Augmentations**:
+     - Build automated Python ingestion scripts (`datasets/scripts/prepare_data.py`) to process Shreya's raw collected datasets.
+     - Implement assistive-specific data augmentations (simulated camera shake, illumination shifts, motion blur, partial synthetic occlusions) using Albumentations or OpenCV.
+     - Generate verified train/val/test splits (70% train, 20% val, 10% test) with zero frame leakage across sequential video frames.
   3. **Tracking Architecture Integration**:
      - Benchmark and configure ByteTrack parameters in `models/visionmate_bytetrack.yaml` (`track_high_thresh`, `track_low_thresh`, `match_thresh`, `track_buffer`).
-     - Ensure tracker output data contracts match Charan's recovery manager schema (`track_id`, `class_name`, `bbox`, `confidence`).
+     - Coordinate with Charan to ensure tracker outputs match the recovery manager schema (`track_id`, `class_name`, `bbox`, `confidence`).
   4. **Model Optimization & Edge Export**:
-     - Export trained models to ONNX / OpenVINO / TensorRT for maximum runtime FPS.
-     - Evaluate INT8 / FP16 post-training quantization trade-offs for edge/laptop execution.
+     - Take Shreya's fine-tuned model weights and export them to ONNX / OpenVINO / TensorRT for maximum inference FPS.
+     - Evaluate INT8 / FP16 post-training quantization trade-offs for smooth execution on laptops or portable devices.
 
 ---
 
 ## 🔄 3. Team Interface Contracts & Hand-offs
 
 ```
-[ SHREYA: Data Pipeline ]
-       │
-       │  Structured YOLO Dataset (images + labels + splits)
-       ▼
-[ CHIRU: Detection & Fine-Tuning ]
-       │
-       │  Trained Weights (.pt / .onnx) + Tuned Tracker Config (.yaml)
-       ▼
-[ CHARAN: Recognition & Speech Integration ]
-       │
-       ▼
-[ End-to-End System (app.py) ]
+[ SHREYA: Raw Data Collection & Annotation ]
+                   │
+                   │ Raw Images & YOLO Labels
+                   ▼
+[ CHIRU: Data Pipeline, Augmentations & Splits ]
+                   │
+                   │ Partitioned Dataset (train/val/test + data.yaml)
+                   ▼
+[ SHREYA: Transfer Learning & Model Fine-Tuning ]
+                   │
+                   │ Trained Model Weights (best.pt)
+                   ▼
+[ CHIRU: Quantization, Edge Export & ByteTrack Tuning ]
+                   │
+                   │ Optimized Weights (best.onnx / best.pt) + visionmate_bytetrack.yaml
+                   ▼
+[ CHARAN: Object Recognition, Recovery & Speech Assistant ]
+                   │
+                   ▼
+[ Complete Integrated Application (app.py) ]
 ```
 
-| Producer | Consumer | Hand-off Artifact | Specification |
-|---|---|---|---|
-| **Shreya** | **Chiru** | Curated Dataset | YOLO format (`images/`, `labels/`, `data.yaml`) with balanced splits. |
-| **Chiru** | **Charan** | Fine-tuned weights & ByteTrack config | `best.pt` / `best.onnx` compatible with `ObjectDetector` + `visionmate_bytetrack.yaml`. |
-| **Charan** | **All** | Main App Harness | Standalone runtime (`app.py`) for live validation, HUD testing, and audio feedback. |
+| Step | Producer | Consumer | Hand-off Artifact | Specification |
+|:---:|---|---|---|---|
+| **1** | **Shreya** | **Chiru** | Raw Collected & Labeled Data | Annotated images and YOLO `.txt` labels. |
+| **2** | **Chiru** | **Shreya** | Partitioned Dataset & Pipeline | Clean augmented dataset (`train/`, `val/`, `test/`) with `data.yaml`. |
+| **3** | **Shreya** | **Chiru** | Fine-Tuned Model Weights | `best.pt` with validation loss logs and mAP evaluations. |
+| **4** | **Chiru** | **Charan** | Optimized Model & Tracker Config | `best.onnx` / `best.pt` + tuned `visionmate_bytetrack.yaml`. |
+| **5** | **Charan** | **All** | Main App Integration | Executable `app.py` for live testing, HUD validation, and voice interaction. |
 
 ---
 
@@ -111,32 +122,32 @@ A structured engineering roadmap and work breakdown structure for the **VisionMa
 
 ### **Phase 1: Foundation & Baseline (Weeks 1–2)**
 - **Charan**: Benchmark existing `app.py` end-to-end pipeline; stress-test STT/TTS on different microphones.
-- **Shreya**: Finalize class ontology (15–20 high-priority assistive classes); collect initial raw video clips and public datasets.
-- **Chiru**: Set up training environment (CUDA, PyTorch, Ultralytics); benchmark baseline `yolo11n.pt` and `yolo26n.pt` on local hardware.
-> **Milestone 1**: Class list frozen, baseline inference latency measured, repository workflow aligned.
+- **Shreya**: Define class ontology (15–20 high-priority assistive classes); collect initial raw video clips and public assistive datasets.
+- **Chiru**: Build the data pipeline skeleton (`datasets/scripts/prepare_data.py`); benchmark baseline `yolo11n.pt` and `yolo26n.pt` on local hardware.
+> **Milestone 1**: Class list frozen, baseline inference latency measured, data pipeline ingestion tested.
 
 ---
 
-### **Phase 2: Data Pipeline & Perception Modules (Weeks 3–4)**
+### **Phase 2: Data Processing & Initial Fine-Tuning (Weeks 3–4)**
 - **Charan**: Implement `TrackRecoveryManager` scoring algorithms and 30-frame temporal query memory in `assistant/query_memory.py`.
-- **Shreya**: Complete annotation of initial dataset (1,500–3,000 labeled instances); build automated data augmentation script.
-- **Chiru**: Run first fine-tuning experiments; tune ByteTrack parameters (`track_buffer`, `match_thresh`) for indoor movement.
-> **Milestone 2**: Dataset v1.0 delivered to Chiru; first fine-tuned weights handed to Charan; recovery & memory operational.
+- **Chiru**: Run automated pipeline on Shreya's initial dataset; generate augmented train/val/test splits; configure ByteTrack parameters.
+- **Shreya**: Execute initial fine-tuning runs using transfer learning on Chiru's dataset splits; track validation loss and baseline mAP scores.
+> **Milestone 2**: Dataset v1.0 pipeline operational; first fine-tuned model produced by Shreya; recovery & query memory working in `app.py`.
 
 ---
 
 ### **Phase 3: Fine-Tuning Optimization & Assistant Integration (Weeks 5–6)**
-- **Charan**: Connect Chiru's fine-tuned model into the voice assistant; expand natural language alias mapping and collision alert thresholds.
-- **Shreya**: Analyze false-positives/false-negatives from Chiru's model; record targeted edge-case data (low light, motion blur); deliver Dataset v2.0.
-- **Chiru**: Retrain on Dataset v2.0 with hyperparameter tuning; export model to optimized ONNX/OpenVINO format; benchmark mAP and FPS.
-> **Milestone 3**: Fine-tuned model running smoothly inside the voice-guided application at >25 FPS.
+- **Shreya**: Retrain on targeted hard examples (low light, motion blur); perform hyperparameter sweeps; deliver finalized `best.pt`.
+- **Chiru**: Export Shreya's model to ONNX / OpenVINO; evaluate quantization (FP16/INT8); benchmark FPS and latency gains.
+- **Charan**: Connect optimized model into the voice assistant; expand natural language alias mapping and collision alert thresholds.
+> **Milestone 3**: Fine-tuned and optimized model running smoothly inside the voice-guided application at >25 FPS.
 
 ---
 
 ### **Phase 4: Full System Integration, Testing & Capstone Presentation (Weeks 7–8)**
 - **Charan**: Conduct simulated low-vision navigation tests; refine HUD overlay and audio error handling.
-- **Shreya**: Generate dataset distribution graphs, data documentation, and demo video footage.
-- **Chiru**: Compile performance benchmark tables (latency, memory footprint, mAP curves) and model architecture slides.
+- **Shreya**: Prepare training progression curves (loss, mAP@0.5, precision-recall) and error analysis for report/presentation.
+- **Chiru**: Compile data pipeline architecture diagram, augmentation ablation studies, and edge latency benchmarks.
 - **All (Charan, Shreya, Chiru)**: Final report writing, presentation rehearsals, and live demo verification.
 > **Final Milestone**: Live project demonstration, final capstone report, and code repository submission.
 
@@ -146,11 +157,14 @@ A structured engineering roadmap and work breakdown structure for the **VisionMa
 
 | Task / Deliverable | Charan | Shreya | Chiru |
 |---|:---:|:---:|:---:|
-| **Assistive Data Collection & Cleansing** | I | **A / R** | C |
-| **Annotation Guidelines & Split Pipeline** | C | **A / R** | C |
-| **YOLO Model Fine-Tuning & Hyperparameters** | C | C | **A / R** |
-| **Model Quantization & Inference Speed** | C | I | **A / R** |
-| **ByteTrack Parameter Tuning** | C | I | **A / R** |
+| **Assistive Data Collection & Raw Footage** | I | **A / R** | C |
+| **Annotation Guidelines & Bounding Box QA** | C | **A / R** | C |
+| **Automated Ingestion & Augmentation Pipeline** | I | C | **A / R** |
+| **Train / Val / Test Dataset Splits** | I | C | **A / R** |
+| **YOLO Model Fine-Tuning & Hyperparameters** | C | **A / R** | C |
+| **Training Loss & mAP Validation** | C | **A / R** | C |
+| **Model Quantization & Inference Speed (ONNX)** | C | C | **A / R** |
+| **ByteTrack Parameter Configuration** | C | I | **A / R** |
 | **Track Recovery & Temporal Stabilization** | **A / R** | I | C |
 | **Spatial 2D Position & Proximity Engine** | **A / R** | I | I |
 | **Voice Command Parsing & Query Memory** | **A / R** | I | I |
@@ -172,12 +186,13 @@ A structured engineering roadmap and work breakdown structure for the **VisionMa
   - [ ] Clean, executable `app.py` with camera auto-probing and HUD
 
 - [ ] Shreya's Deliverables:
-  - [ ] Curated assistive navigation dataset (labeled in YOLO format)
-  - [ ] Automated data ingestion and augmentation pipeline script
-  - [ ] Dataset statistics report (class distributions, splits, sample gallery)
+  - [ ] Curated and annotated assistive navigation dataset
+  - [ ] Fine-tuned YOLO model weights (`best.pt`)
+  - [ ] Training loss, mAP validation curves, and error analysis report
 
 - [ ] Chiru's Deliverables:
-  - [ ] Fine-tuned YOLO model weights (`best.pt` / `best.onnx`)
-  - [ ] Quantitative benchmarking suite (mAP@0.5, precision, recall, latency)
+  - [ ] Automated data pipeline & augmentation script (`prepare_data.py`)
+  - [ ] Verified train/val/test dataset partitions with balance statistics
+  - [ ] Quantized/optimized model exports (`best.onnx`) and latency benchmarks
   - [ ] Tuned ByteTrack configuration file
 ```
