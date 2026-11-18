@@ -30,19 +30,36 @@ from assistant.speech import SpeechAnnouncer
 
 def find_working_camera():
     """
-    Test camera indices 0, 1, 2, 3 in sequence and return the first working VideoCapture.
+    Test camera indices with DirectShow (CAP_DSHOW) on Windows, falling back to default.
+    Returns the first working VideoCapture object and index.
     """
-    for index in [0, 1, 2, 3]:
-        print(f"Testing camera index: {index}...")
-        cap = cv2.VideoCapture(index)
-        if cap.isOpened():
-            cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
-            cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
-            ret, frame = cap.read()
-            if ret and frame is not None and frame.size > 0:
-                print(f"--> Using camera index: {index}")
-                return cap, index
-            cap.release()
+    backends = []
+    if sys.platform == "win32":
+        backends = [(cv2.CAP_DSHOW, "DirectShow"), (cv2.CAP_ANY, "Default")]
+    else:
+        backends = [(cv2.CAP_ANY, "Default")]
+
+    for backend, backend_name in backends:
+        for index in [0, 1, 2, 3]:
+            print(f"Testing camera index {index} with {backend_name}...")
+            cap = cv2.VideoCapture(index, backend)
+            if cap.isOpened():
+                ret, frame = cap.read()
+                if ret and frame is not None and frame.size > 0:
+                    # Attempt 720p upgrade, but keep camera even if 720p isn't supported
+                    cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
+                    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
+                    ret2, frame2 = cap.read()
+                    if not ret2 or frame2 is None or frame2.size == 0:
+                        # Revert to standard resolution if 720p caused issue
+                        cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
+                        cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
+
+                    actual_w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+                    actual_h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+                    print(f"--> Camera ready on index {index} ({backend_name}) at {actual_w}x{actual_h}")
+                    return cap, index
+                cap.release()
     return None, -1
 
 
