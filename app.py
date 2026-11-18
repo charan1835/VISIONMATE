@@ -170,6 +170,8 @@ def input_listener(command_queue: queue.Queue, is_running: list):
 
     recognizer = sr.Recognizer()
     recognizer.pause_threshold = 0.8
+    command_listen_seconds = 6
+    command_cooldown_seconds = 3.0
     input_device = sd.default.device[0]
     device_info = sd.query_devices(input_device, "input")
     sample_rate = int(device_info["default_samplerate"])
@@ -180,7 +182,7 @@ def input_listener(command_queue: queue.Queue, is_running: list):
         try:
             print("[Voice] Listening...")
             audio_bytes = sd.rec(
-                int(sample_rate * 4),
+                int(sample_rate * command_listen_seconds),
                 samplerate=sample_rate,
                 channels=1,
                 dtype="int16",
@@ -202,6 +204,7 @@ def input_listener(command_queue: queue.Queue, is_running: list):
             if command:
                 print(f"[Voice Command Received] '{command}'")
                 command_queue.put(command)
+                time.sleep(command_cooldown_seconds)
         except sr.WaitTimeoutError:
             continue
         except sr.UnknownValueError:

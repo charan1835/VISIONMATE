@@ -21,7 +21,13 @@ import itertools
 class SpeechAnnouncer:
     """Speaks short announcements from a background worker thread."""
 
-    def __init__(self, rate: int = 175, volume: float = 1.0, repeat_interval: float = 5.0):
+    def __init__(
+        self,
+        rate: int = 175,
+        volume: float = 1.0,
+        repeat_interval: float = 5.0,
+        inter_utterance_delay: float = 1.5,
+    ):
         self._rate = rate
         self._volume = max(0.0, min(1.0, volume))
         self._pending = []                        # List of (priority, seq, text)
@@ -29,6 +35,7 @@ class SpeechAnnouncer:
         self._has_item = threading.Event()
         self._sequence = itertools.count()
         self._running = True
+        self._inter_utterance_delay = max(0.0, float(inter_utterance_delay))
 
         # Object-announcement throttle state
         self._last_seen: dict = {}
@@ -123,6 +130,8 @@ class SpeechAnnouncer:
                 text = self._dequeue_next()
                 if text:
                     self._speak_once(text)
+                    if self._inter_utterance_delay > 0:
+                        time.sleep(self._inter_utterance_delay)
         finally:
             if com_initialized and pythoncom is not None:
                 pythoncom.CoUninitialize()
