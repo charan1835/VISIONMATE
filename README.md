@@ -30,6 +30,10 @@
   - [Temporal Detection Stabilizer](#2-temporal-detection-stabilizer)
   - [Spatial & Proximity Engine](#3-spatial--proximity-engine)
   - [Priority Speech Engine](#4-priority-speech-engine)
+- [Model Evaluation](#-model-evaluation)
+  - [Confusion Matrices](#confusion-matrices)
+  - [Scoring Formula](#scoring-formula)
+  - [Error Percentage](#error-percentage)
 - [Configuration](#-configuration)
 - [Troubleshooting](#-troubleshooting)
 - [Roadmap](#-roadmap)
@@ -262,6 +266,97 @@ To prevent speech overlap and ensure user safety:
 - **Priority 0 (High Priority)**: Direct assistant answers to user queries and critical obstacle collision alerts. Interrupts any active low-priority speech.
 - **Priority 1 (Normal Priority)**: Ambient narration of newly detected objects, rate-limited by configurable cooldown timers.
 - **Thread Safety**: On Windows, every utterance runs within an initialized COM apartment (`pythoncom.CoInitialize()`), eliminating the SAPI5 concurrency crashes typical in multi-threaded Python apps.
+
+---
+
+## 📊 Model Evaluation
+
+The YOLO models were evaluated on `datasets/coco_experiment.yaml`. The reported
+values below are the baseline results before project fine-tuning.
+
+| Model | Precision | Recall | F1-score | mAP@0.50 | mAP@0.50:0.95 | FPS |
+|---|---:|---:|---:|---:|---:|---:|
+| YOLO11n baseline | 64.56% | 62.34% | 63.43% | 69.49% | 54.87% | 23.3 |
+| YOLO26n baseline | 79.36% | 54.74% | 64.79% | 67.44% | 51.62% | 42.7 |
+
+### Confusion Matrices
+
+For multiclass object detection, each matrix is organized by the actual COCO
+class on the vertical axis and the predicted class on the horizontal axis.
+The normalized matrices show the proportion of predictions for each actual
+class. Darker diagonal values indicate better correct-class classification;
+off-diagonal values indicate confusion between classes.
+
+| Model | Confusion Matrix | Normalized Confusion Matrix |
+|---|---|---|
+| YOLO11n baseline | [![YOLO11n confusion matrix](runs/research/eval/yolo11n_baseline/confusion_matrix.png)](runs/research/eval/yolo11n_baseline/confusion_matrix.png) | [![YOLO11n normalized confusion matrix](runs/research/eval/yolo11n_baseline/confusion_matrix_normalized.png)](runs/research/eval/yolo11n_baseline/confusion_matrix_normalized.png) |
+| YOLO26n baseline | [![YOLO26n confusion matrix](runs/research/eval/yolo26n_baseline/confusion_matrix.png)](runs/research/eval/yolo26n_baseline/confusion_matrix.png) | [![YOLO26n normalized confusion matrix](runs/research/eval/yolo26n_baseline/confusion_matrix_normalized.png)](runs/research/eval/yolo26n_baseline/confusion_matrix_normalized.png) |
+
+Additional matrices from pilot and fine-tuned experiments are available in:
+
+- [`runs/research/pilot_yolo11n/`](runs/research/pilot_yolo11n/)
+- [`runs/research/pilot_yolo26n/`](runs/research/pilot_yolo26n/)
+- [`runs/research/eval/yolo11n_finetuned/`](runs/research/eval/yolo11n_finetuned/)
+- [`runs/research/eval/yolo26n_finetuned/`](runs/research/eval/yolo26n_finetuned/)
+
+### Scoring Formula
+
+The basic binary classification terms used in object-detection evaluation are:
+
+- **TP**: Correct object detected.
+- **FP**: Object/background falsely detected.
+- **FN**: Real object missed by the detector.
+- **TN**: Background correctly identified as background.
+
+$$
+\text{Precision} = \frac{TP}{TP + FP}
+$$
+
+$$
+\text{Recall} = \frac{TP}{TP + FN}
+$$
+
+$$
+\text{F1-score} = 2 \times \frac{\text{Precision} \times \text{Recall}}
+{\text{Precision} + \text{Recall}}
+$$
+
+The overall model score is also reported using mean average precision:
+
+$$
+\text{mAP} = \frac{1}{N}\sum_{i=1}^{N} AP_i
+$$
+
+where $N$ is the number of evaluated COCO classes and $AP_i$ is the average
+precision for class $i$. `mAP@0.50` uses an IoU threshold of 0.50, while
+`mAP@0.50:0.95` averages IoU thresholds from 0.50 through 0.95.
+
+### Error Percentage
+
+Evaluation errors can be derived from the complementary score percentages:
+
+$$
+\text{Precision Error} = (1 - \text{Precision}) \times 100
+$$
+
+$$
+\text{Recall/Missed-Detection Error} = (1 - \text{Recall}) \times 100
+$$
+
+$$
+\text{F1 Error} = (1 - \text{F1-score}) \times 100
+$$
+
+Using the baseline values:
+
+| Model | False-Positive/Precision Error | Missed-Detection/Recall Error | F1 Error |
+|---|---:|---:|---:|
+| YOLO11n baseline | 35.44% | 37.66% | 36.57% |
+| YOLO26n baseline | 20.64% | 45.26% | 35.21% |
+
+These are **metric-derived error complements**, not literal counts of all
+incorrect predictions. Total TP, FP, FN, and TN counts may be obtained from
+raw YOLO prediction records and an externally produced confusion-matrix CSV.
 
 ---
 
