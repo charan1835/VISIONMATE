@@ -1,3 +1,7 @@
 ultralytics
 opencv-python
 numpy
+pyttsx3
+pywin32
+SpeechRecognition
+sounddevice

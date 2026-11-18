@@ -25,6 +25,7 @@ from spatial.distance import DistanceEstimator
 from spatial.obstacle import ObstacleAnalyzer
 from assistant.controller import AssistantController
 from assistant.query_memory import ObjectQueryMemory
+from assistant.speech import SpeechAnnouncer
 
 
 def find_working_camera():
@@ -35,6 +36,8 @@ def find_working_camera():
         print(f"Testing camera index: {index}...")
         cap = cv2.VideoCapture(index)
         if cap.isOpened():
+            cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
+            cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
             ret, frame = cap.read()
             if ret and frame is not None and frame.size > 0:
                 print(f"--> Using camera index: {index}")
@@ -43,23 +46,144 @@ def find_working_camera():
     return None, -1
 
 
+def draw_track_label(frame, track):
+    """Draw a high-contrast, three-line label for a tracked object."""
+    x1, y1, x2, y2 = track["bbox"]
+    track_id = track["track_id"]
+    class_name = str(track["class_name"]).replace("_", " ")
+    confidence = track["confidence"]
+    is_stale = track.get("is_stale", False)
+    is_recovered = track.get("recovered", False)
+
+    box_color = (0, 165, 255) if is_stale else ((255, 255, 0) if is_recovered else (0, 255, 0))
+    status_tag = " STALE" if is_stale else (" RECOVERED" if is_recovered else "")
+
+    cv2.rectangle(frame, (x1, y1), (x2, y2), box_color, 2)
+
+    horiz = str(track["position"]["horizontal"]).upper()
+    vert = str(track["position"]["vertical"]).upper()
+    dist_cat = str(track["distance"]["category"]).upper().replace("_", " ")
+    lines = [
+        f"ID {track_id} | {class_name}{status_tag} | {confidence:.2f}",
+        f"POS: {horiz} / {vert}",
+        f"DIST: {dist_cat}",
+    ]
+
+    frame_h, frame_w = frame.shape[:2]
+    font_scale = 0.52 if frame_w >= 1280 else 0.44
+    thickness = 2
+    line_height = 24 if frame_w >= 1280 else 21
+    max_width = 0
+    text_sizes = []
+    for line in lines:
+        size, baseline = cv2.getTextSize(line, cv2.FONT_HERSHEY_DUPLEX, font_scale, thickness)
+        text_sizes.append((size, baseline))
+        max_width = max(max_width, size[0])
+
+    label_width = max_width + 16
+    label_height = len(lines) * line_height + 8
+    label_x1 = max(0, min(x1, frame_w - label_width))
+    label_y2 = max(y1 - 6, label_height + 6)
+    label_y1 = label_y2 - label_height
+
+    cv2.rectangle(
+        frame,
+        (label_x1, label_y1),
+        (min(frame_w - 1, label_x1 + label_width), label_y2),
+        (15, 15, 15),
+        -1,
+    )
+    cv2.rectangle(
+        frame,
+        (label_x1, label_y1),
+        (min(frame_w - 1, label_x1 + label_width), label_y2),
+        box_color,
+        1,
+    )
+
+    for index, line in enumerate(lines):
+        text_y = label_y1 + 18 + index * line_height
+        text_color = box_color if index == 0 else ((255, 255, 0) if index == 1 else (0, 255, 255))
+        cv2.putText(
+            frame,
+            line,
+            (label_x1 + 8, text_y),
+            cv2.FONT_HERSHEY_DUPLEX,
+            font_scale,
+            (0, 0, 0),
+            thickness + 2,
+            cv2.LINE_AA,
+        )
+        cv2.putText(
+            frame,
+            line,
+            (label_x1 + 8, text_y),
+            cv2.FONT_HERSHEY_DUPLEX,
+            font_scale,
+            text_color,
+            thickness,
+            cv2.LINE_AA,
+        )
+
+
 def input_listener(command_queue: queue.Queue, is_running: list):
     """
-    Secondary thread listening for terminal input without freezing the main camera loop.
+    Secondary thread listening for microphone voice commands without freezing the camera loop.
     """
     print("\n----------------------------------------------------------")
-    print("  VisionMate Voice/Text Assistant Active")
-    print("  Type a command (e.g. 'Find my bottle') and press Enter.")
+    print("  VisionMate Voice Assistant Active")
+    print("  Speak a command (e.g. 'Find my bottle').")
     print("  Press 'Q' or 'ESC' in the camera window to exit.")
+    print("  Press 'F' in the camera window to toggle fullscreen.")
     print("----------------------------------------------------------\n")
-    
+
+    try:
+        import speech_recognition as sr
+        import sounddevice as sd
+    except Exception as exc:
+        print(f"Voice command unavailable: {exc}")
+        print("Text input fallback: type a command and press Enter.")
+        while is_running[0]:
+            try:
+                user_input = input("> ")
+                if user_input and user_input.strip():
+                    command_queue.put(user_input.strip())
+            except (EOFError, KeyboardInterrupt):
+                break
+            except Exception:
+                pass
+        return
+
+    recognizer = sr.Recognizer()
+    recognizer.pause_threshold = 0.8
+
     while is_running[0]:
         try:
-            user_input = input("> ")
-            if user_input and user_input.strip():
-                command_queue.put(user_input.strip())
-        except (EOFError, KeyboardInterrupt):
-            break
+            print("[Voice] Listening...")
+            sample_rate = 48000
+            audio_bytes = sd.rec(
+                int(sample_rate * 4),
+                samplerate=sample_rate,
+                channels=1,
+                dtype="int16",
+            )
+            sd.wait()
+
+            audio = sr.AudioData(
+                audio_bytes.tobytes(),
+                sample_rate,
+                2,
+            )
+            command = recognizer.recognize_google(audio, language="en-US").strip()
+            if command:
+                print(f"[Voice Command Received] '{command}'")
+                command_queue.put(command)
+        except sr.WaitTimeoutError:
+            continue
+        except sr.UnknownValueError:
+            continue
+        except sr.RequestError as exc:
+            print(f"Voice recognition service unavailable: {exc}")
         except Exception:
             pass
 
@@ -152,6 +276,11 @@ def main():
     print("               VisionMate Application v1.0                ")
     print("==========================================================")
 
+    window_name = "VisionMate"
+    cv2.namedWindow(window_name, cv2.WINDOW_NORMAL)
+    cv2.setWindowProperty(window_name, cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
+    fullscreen = True
+
     # 1. Probe & Open Physical Camera
     cap, cam_idx = find_working_camera()
     if cap is None:
@@ -177,8 +306,18 @@ def main():
         print(f"Webcam active at resolution: {frame_width}x{frame_height}")
 
         # 2. Initialize Perception & Assistant Modules
-        print("Initializing ObjectTracker (YOLO26n + ByteTrack)...")
-        tracker = ObjectTracker(model_path_or_detector="yolo26n.pt", confidence=0.35, tracker_type="models/visionmate_bytetrack.yaml")
+        print("Initializing YOLO11n baseline + ByteTrack...")
+        project_root = os.path.dirname(os.path.abspath(__file__))
+        model_path = os.path.join(project_root, "yolo11n.pt")
+        if not os.path.exists(model_path):
+            model_path = os.path.join(project_root, "yolo26n.pt")
+
+        tracker = ObjectTracker(
+            model_path_or_detector=model_path,
+            confidence=0.35,
+            tracker_type=os.path.join(project_root, "models", "visionmate_bytetrack.yaml"),
+            imgsz=640,
+        )
         recovery_manager = TrackRecoveryManager(
             max_recovery_frames=15,
             max_center_distance=0.20,
@@ -213,6 +352,8 @@ def main():
         fps = 0.0
         prev_time = time.time()
         active_response = ""
+        speech = SpeechAnnouncer(rate=175, volume=1.0)
+        minimum_speech_confidence = 0.35
 
         # 4. Main Perception & Control Loop
         while True:
@@ -251,6 +392,15 @@ def main():
             # Analyze proximity obstacles
             obstacle_warnings = obstacle_analyzer.analyze(current_detections)
 
+            # Announce newly visible object types and repeat them periodically.
+            speech_labels = [
+                track["class_name"]
+                for track in current_detections
+                if not track.get("is_stale", False)
+                and float(track.get("confidence", 0.0)) >= minimum_speech_confidence
+            ]
+            speech.announce_objects(speech_labels)
+
             # E. Check for New User Commands (Non-blocking queue check)
             try:
                 cmd_text = command_queue.get_nowait()
@@ -258,6 +408,7 @@ def main():
                     print(f"\n[Command Received] '{cmd_text}'")
                     active_response = assistant_controller.process_command(cmd_text, current_detections)
                     print(f"[Assistant Feedback] '{active_response}'\n")
+                    speech.announce(active_response)
             except queue.Empty:
                 pass
             except Exception as e:
@@ -265,31 +416,7 @@ def main():
 
             # F. Render Visual Bounding Boxes & Labels
             for t in current_detections:
-                x1, y1, x2, y2 = t["bbox"]
-                track_id = t["track_id"]
-                class_name = t["class_name"]
-                confidence = t["confidence"]
-                is_stale = t.get("is_stale", False)
-                is_recovered = t.get("recovered", False)
-
-                horiz = t["position"]["horizontal"].upper()
-                vert = t["position"]["vertical"].upper()
-                dist_cat = t["distance"]["category"].upper().replace("_", " ")
-
-                # Color: Green for fresh tracks, Orange for temporarily stale tracks, Cyan for recovered tracks
-                box_color = (0, 165, 255) if is_stale else ((255, 255, 0) if is_recovered else (0, 255, 0))
-                status_tag = " [STALE]" if is_stale else (" [RECOVERED]" if is_recovered else "")
-
-                cv2.rectangle(frame, (x1, y1), (x2, y2), box_color, 2)
-
-                label_id = f"ID {track_id} | {class_name}{status_tag} | {confidence:.2f}"
-                label_pos = f"Pos: {horiz} / {vert}"
-                label_dist = f"Dist: {dist_cat}"
-
-                base_y = max(y1 - 40, 45)
-                cv2.putText(frame, label_id, (x1, base_y - 20), cv2.FONT_HERSHEY_SIMPLEX, 0.55, box_color, 2)
-                cv2.putText(frame, label_pos, (x1, base_y - 4), cv2.FONT_HERSHEY_SIMPLEX, 0.48, (255, 255, 0), 1)
-                cv2.putText(frame, label_dist, (x1, base_y + 12), cv2.FONT_HERSHEY_SIMPLEX, 0.48, (0, 255, 255), 1)
+                draw_track_label(frame, t)
 
             # G. Top-Left Header Box
             cv2.rectangle(frame, (10, 10), (220, 75), (0, 0, 0), -1)
@@ -306,13 +433,20 @@ def main():
                 render_response_overlay(frame, active_response)
 
             # I. Display Window
-            cv2.imshow("VisionMate", frame)
+            cv2.imshow(window_name, frame)
 
             # Keyboard controls
             key = cv2.waitKey(1) & 0xFF
             if key == ord('q') or key == ord('Q') or key == 27:  # 27 = ESC
                 print("\nExit key pressed. Stopping VisionMate...")
                 break
+            if key == ord('f') or key == ord('F'):
+                fullscreen = not fullscreen
+                cv2.setWindowProperty(
+                    window_name,
+                    cv2.WND_PROP_FULLSCREEN,
+                    cv2.WINDOW_FULLSCREEN if fullscreen else cv2.WINDOW_NORMAL,
+                )
 
     except KeyboardInterrupt:
         print("\nKeyboardInterrupt received.")
@@ -320,6 +454,8 @@ def main():
         print(f"\nUnexpected error in app loop: {e}")
     finally:
         is_running[0] = False
+        if "speech" in locals():
+            speech.stop()
         cap.release()
         cv2.destroyAllWindows()
         print("VisionMate shut down cleanly.")
