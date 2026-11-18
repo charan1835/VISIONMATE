@@ -139,7 +139,10 @@ def input_listener(command_queue: queue.Queue, is_running: list):
 
     try:
         import speech_recognition as sr
+        import speech_recognition.recognizers.google as google_recognizer
         import sounddevice as sd
+        from urllib.error import HTTPError, URLError
+        from urllib.request import urlopen
     except Exception as exc:
         print(f"Voice command unavailable: {exc}")
         print("Text input fallback: type a command and press Enter.")
@@ -154,20 +157,40 @@ def input_listener(command_queue: queue.Queue, is_running: list):
                 pass
         return
 
+    def obtain_transcription_with_closed_response(request, timeout):
+        try:
+            with urlopen(request, timeout=timeout) as response:
+                return response.read().decode("utf-8")
+        except HTTPError as exc:
+            raise sr.RequestError(f"recognition request failed: {exc.reason}") from exc
+        except URLError as exc:
+            raise sr.RequestError(f"recognition connection failed: {exc.reason}") from exc
+
+    google_recognizer.obtain_transcription = obtain_transcription_with_closed_response
+
     recognizer = sr.Recognizer()
     recognizer.pause_threshold = 0.8
+    input_device = sd.default.device[0]
+    device_info = sd.query_devices(input_device, "input")
+    sample_rate = int(device_info["default_samplerate"])
+    recognition_failures = 0
+    print(f"[Voice] Using microphone: {device_info['name']} at {sample_rate} Hz")
 
     while is_running[0]:
         try:
             print("[Voice] Listening...")
-            sample_rate = 48000
             audio_bytes = sd.rec(
                 int(sample_rate * 4),
                 samplerate=sample_rate,
                 channels=1,
                 dtype="int16",
+                device=input_device,
             )
             sd.wait()
+
+            audio_level = float(np.sqrt(np.mean(np.square(audio_bytes.astype(np.float32)))))
+            if audio_level < 300:
+                continue
 
             audio = sr.AudioData(
                 audio_bytes.tobytes(),
@@ -175,17 +198,26 @@ def input_listener(command_queue: queue.Queue, is_running: list):
                 2,
             )
             command = recognizer.recognize_google(audio, language="en-US").strip()
+            recognition_failures = 0
             if command:
                 print(f"[Voice Command Received] '{command}'")
                 command_queue.put(command)
         except sr.WaitTimeoutError:
             continue
         except sr.UnknownValueError:
+            recognition_failures = 0
+            print("[Voice] Could not understand the audio.")
             continue
         except sr.RequestError as exc:
-            print(f"Voice recognition service unavailable: {exc}")
-        except Exception:
-            pass
+            recognition_failures += 1
+            retry_delay = min(30, 2 ** min(recognition_failures, 4))
+            print(
+                f"Voice recognition service unavailable: {exc}. "
+                f"Retrying in {retry_delay} seconds."
+            )
+            time.sleep(retry_delay)
+        except Exception as exc:
+            print(f"[Voice] Microphone error: {exc}")
 
 
 def render_obstacle_overlay(frame, warning: dict):

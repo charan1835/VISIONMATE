@@ -2,15 +2,19 @@ import queue
 import threading
 import sys
 import time
+import itertools
 
 
 class SpeechAnnouncer:
     """Speaks short announcements from a background worker."""
 
-    def __init__(self, rate=175, volume=1.0):
-        self._queue = queue.Queue()
+    def __init__(self, rate=175, volume=1.0, repeat_interval=5.0):
+        self._queue = queue.PriorityQueue()
+        self._sequence = itertools.count()
         self._running = True
-        self._seen_labels = {}
+        self._last_seen = {}
+        self._last_announced = {}
+        self._repeat_interval = max(0.0, float(repeat_interval))
         self._absence_timeout = 2.0
         self._engine_ready = threading.Event()
         self._worker = threading.Thread(
@@ -55,7 +59,7 @@ class SpeechAnnouncer:
         try:
             while self._running:
                 try:
-                    text = self._queue.get(timeout=0.2)
+                    _, _, text = self._queue.get(timeout=0.2)
                 except queue.Empty:
                     continue
 
@@ -73,7 +77,28 @@ class SpeechAnnouncer:
     def announce(self, text):
         if text:
             announcement = str(text).strip()
-            self._queue.put(announcement)
+            self._discard_background_announcements()
+            self._queue.put((0, next(self._sequence), announcement))
+
+    def _announce_background(self, text):
+        if text:
+            announcement = str(text).strip()
+            self._queue.put((1, next(self._sequence), announcement))
+
+    def _discard_background_announcements(self):
+        retained = []
+        while True:
+            try:
+                priority, sequence, text = self._queue.get_nowait()
+            except queue.Empty:
+                break
+
+            self._queue.task_done()
+            if priority == 0:
+                retained.append((priority, sequence, text))
+
+        for item in retained:
+            self._queue.put(item)
 
     def announce_objects(self, labels):
         """Announce each object type when it first becomes visible."""
@@ -84,21 +109,33 @@ class SpeechAnnouncer:
             if str(label).strip()
         }
 
-        new_labels = [
-            label for label in sorted(current_labels)
-            if label not in self._seen_labels
-        ]
+        new_labels = []
         for label in current_labels:
-            self._seen_labels[label] = now
+            last_announced = self._last_announced.get(label)
+            if (
+                label not in self._last_seen
+                or last_announced is None
+                or now - last_announced >= self._repeat_interval
+            ):
+                new_labels.append(label)
+            self._last_seen[label] = now
 
-        self._seen_labels = {
+        self._last_seen = {
             label: last_seen
-            for label, last_seen in self._seen_labels.items()
+            for label, last_seen in self._last_seen.items()
             if now - last_seen <= self._absence_timeout
+        }
+        self._last_announced = {
+            label: last_announced
+            for label, last_announced in self._last_announced.items()
+            if label in self._last_seen
         }
 
         if new_labels:
-            self.announce(" and ".join(new_labels) + " detected")
+            new_labels.sort()
+            self._announce_background(" and ".join(new_labels) + " detected")
+            for label in new_labels:
+                self._last_announced[label] = now
 
     def stop(self):
         self._running = False
