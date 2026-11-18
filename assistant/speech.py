@@ -47,6 +47,7 @@ class SpeechAnnouncer:
         # When muted, all ambient narration is suppressed.
         # Only the next explicit user command response (priority 0) will unmute.
         self._muted = False
+        self._current_engine = None
 
         self._engine_ready = threading.Event()
         self._worker = threading.Thread(
@@ -93,19 +94,51 @@ class SpeechAnnouncer:
         Windows SAPI5 — reusing the same instance across multiple
         runAndWait() calls causes the second call to hang silently.
         """
+        with self._lock:
+            if self._muted:
+                return
+
         try:
             import pyttsx3
             engine = pyttsx3.init()
+            with self._lock:
+                if self._muted:
+                    try:
+                        engine.stop()
+                    except Exception:
+                        pass
+                    return
+                self._current_engine = engine
+
             engine.setProperty("rate", self._rate)
             engine.setProperty("volume", self._volume)
             voices = engine.getProperty("voices")
             if voices:
                 engine.setProperty("voice", voices[0].id)
+
+            def on_word(name, location, length):
+                if self._muted or not self._running:
+                    try:
+                        engine.stop()
+                    except Exception:
+                        pass
+
+            try:
+                engine.connect("started-word", on_word)
+            except Exception:
+                pass
+
             engine.say(text)
             engine.runAndWait()
-            engine.stop()
+            try:
+                engine.stop()
+            except Exception:
+                pass
         except Exception as exc:
             print(f"[Speech] Error speaking text: {exc}")
+        finally:
+            with self._lock:
+                self._current_engine = None
 
     def _speech_worker(self) -> None:
         # On Windows, COM must be initialised on the thread that uses SAPI5.
@@ -147,16 +180,25 @@ class SpeechAnnouncer:
 
     def mute(self) -> None:
         """
-        Silence all ambient narration immediately.
-        Called when user says 'stop'. Unmuted automatically on the next
-        priority-0 (assistant command) announcement.
+        Silence all ambient narration immediately and abort current speech playback.
+        Called when user says 'stop' or presses 'S'.
+        Unmuted automatically on the next priority-0 (assistant command) announcement.
         """
         with self._lock:
             # Flush ALL queued items — both ambient and any pending P0 items
             self._pending = []
             self._has_item.clear()
             self._muted = True
-        print("[Speech] Muted — ambient narration suppressed until next command.")
+            active_engine = self._current_engine
+
+        # Immediately stop currently active audio if an engine is mid-utterance
+        if active_engine is not None:
+            try:
+                active_engine.stop()
+            except Exception:
+                pass
+
+        print("[Speech] Muted — narration halted immediately.")
 
     def announce(self, text: str) -> None:
         """
