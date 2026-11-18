@@ -43,6 +43,11 @@ class SpeechAnnouncer:
         self._repeat_interval = max(0.0, float(repeat_interval))
         self._absence_timeout = 2.0
 
+        # --- STOP / MUTE state ---
+        # When muted, all ambient narration is suppressed.
+        # Only the next explicit user command response (priority 0) will unmute.
+        self._muted = False
+
         self._engine_ready = threading.Event()
         self._worker = threading.Thread(
             target=self._speech_worker,
@@ -140,11 +145,25 @@ class SpeechAnnouncer:
     # Public API
     # ------------------------------------------------------------------
 
+    def mute(self) -> None:
+        """
+        Silence all ambient narration immediately.
+        Called when user says 'stop'. Unmuted automatically on the next
+        priority-0 (assistant command) announcement.
+        """
+        with self._lock:
+            # Flush ALL queued items — both ambient and any pending P0 items
+            self._pending = []
+            self._has_item.clear()
+            self._muted = True
+        print("[Speech] Muted — ambient narration suppressed until next command.")
+
     def announce(self, text: str) -> None:
         """
         Speak an assistant command response (priority 0).
         Clears any queued ambient announcements so the user hears the
         response without delay.
+        Calling this also unmutes the announcer if it was previously stopped.
         """
         if not text:
             return
@@ -152,11 +171,13 @@ class SpeechAnnouncer:
         with self._lock:
             # Drop all background (priority 1) items; keep any pending command responses
             self._pending = [item for item in self._pending if item[0] == 0]
+            # Unmute — user issued a new command so narration may resume after this
+            self._muted = False
         self._enqueue(0, announcement)
 
     def _announce_background(self, text: str) -> None:
-        """Queue a low-priority ambient object detection announcement."""
-        if text:
+        """Queue a low-priority ambient object detection announcement (suppressed when muted)."""
+        if text and not self._muted:
             self._enqueue(1, str(text).strip())
 
     def announce_objects(self, labels) -> None:

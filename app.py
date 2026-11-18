@@ -440,10 +440,16 @@ def main():
             try:
                 cmd_text = command_queue.get_nowait()
                 if cmd_text:
-                    print(f"\n[Command Received] '{cmd_text}'")
-                    active_response = assistant_controller.process_command(cmd_text, current_detections)
-                    print(f"[Assistant Feedback] '{active_response}'\n")
-                    speech.announce(active_response)
+                    # --- STOP COMMAND: silence everything until next query ---
+                    if cmd_text.strip().lower() in {"stop", "stop it", "be quiet", "quiet", "silence", "shut up", "pause"}:
+                        print(f"\n[Voice] Stop command received — muting narration.")
+                        speech.mute()
+                        active_response = ""
+                    else:
+                        print(f"\n[Command Received] '{cmd_text}'")
+                        active_response = assistant_controller.process_command(cmd_text, current_detections)
+                        print(f"[Assistant Feedback] '{active_response}'\n")
+                        speech.announce(active_response)
             except queue.Empty:
                 pass
             except Exception as e:
