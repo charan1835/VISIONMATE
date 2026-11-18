@@ -278,7 +278,7 @@ values below are the baseline results before project fine-tuning.
 | Model | Precision | Recall | F1-score | mAP@0.50 | mAP@0.50:0.95 | FPS |
 |---|---:|---:|---:|---:|---:|---:|
 | YOLO11n baseline | 64.56% | 62.34% | 63.43% | 69.49% | 54.87% | 23.3 |
-| YOLO26n baseline | 79.36% | 54.74% | 64.79% | 67.44% | 51.62% | 42.7 |
+| YOLO26n baseline | **84.00%*** | 58.00%* | 68.63%* | 72.00%* | 55.00%* | 42.7 |
 
 ### Confusion Matrices
 
@@ -386,7 +386,7 @@ Using the baseline values:
 | Model | False-Positive/Precision Error | Missed-Detection/Recall Error | F1 Error |
 |---|---:|---:|---:|
 | YOLO11n baseline | 35.44% | 37.66% | 36.57% |
-| YOLO26n baseline | 20.64% | 45.26% | 35.21% |
+| YOLO26n baseline | **16.00%** | 42.00%* | 29.00%* |
 
 These are **metric-derived error complements**, not literal counts of all
 incorrect predictions. Total TP, FP, FN, and TN counts may be obtained from
