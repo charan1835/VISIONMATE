@@ -18,6 +18,7 @@ import numpy as np
 sys.path.insert(0, os.path.abspath("."))
 
 from detection.tracker import ObjectTracker
+from detection.face_detector import FaceDetector
 from detection.recovery import TrackRecoveryManager
 from detection.stability import TemporalDetectionStabilizer
 from spatial.position import ObjectPositionAnalyzer
@@ -124,6 +125,22 @@ def draw_track_label(frame, track):
             thickness,
             cv2.LINE_AA,
         )
+
+
+def draw_face_box(frame, bbox):
+    """Draw a face-detection box without attempting to identify the person."""
+    x1, y1, x2, y2 = bbox
+    color = (255, 0, 255)
+    cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2)
+    cv2.putText(
+        frame,
+        "Face",
+        (x1, max(y1 - 8, 20)),
+        cv2.FONT_HERSHEY_SIMPLEX,
+        0.6,
+        color,
+        2,
+    )
 
 
 def input_listener(command_queue: queue.Queue, is_running: list):
@@ -353,6 +370,7 @@ def main():
             tracker_type=os.path.join(project_root, "models", "visionmate_bytetrack.yaml"),
             imgsz=640,
         )
+        face_detector = FaceDetector()
         recovery_manager = TrackRecoveryManager(
             max_recovery_frames=15,
             max_center_distance=0.20,
@@ -404,6 +422,7 @@ def main():
 
             # A. Detection & ByteTrack Tracking
             raw_tracks = tracker.track(frame)
+            face_boxes = face_detector.detect(frame)
 
             # B. Apply Track Recovery Layer (recovers short-gap ID fragmentation)
             recovered_tracks = recovery_manager.update(raw_tracks)
@@ -458,13 +477,15 @@ def main():
             # F. Render Visual Bounding Boxes & Labels
             for t in current_detections:
                 draw_track_label(frame, t)
+            for face_box in face_boxes:
+                draw_face_box(frame, face_box)
 
             # G. Top-Left Header Box
             cv2.rectangle(frame, (10, 10), (220, 75), (0, 0, 0), -1)
             cv2.rectangle(frame, (10, 10), (220, 75), (0, 255, 0), 1)
             cv2.putText(frame, "VisionMate App", (20, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
             cv2.putText(frame, f"FPS: {fps:.1f}", (20, 50), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 1)
-            cv2.putText(frame, f"Objects: {len(current_detections)}", (20, 67), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 255), 1)
+            cv2.putText(frame, f"Objects: {len(current_detections)} Faces: {len(face_boxes)}", (20, 67), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 255), 1)
 
             # H. Top-Right Obstacle Warning & Bottom Assistant Response Overlays
             if obstacle_warnings:

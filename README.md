@@ -58,6 +58,7 @@ Navigating dynamic everyday environments poses significant challenges for indivi
 ## ✨ Key Features
 
 - **⚡ Real-Time Object Detection**: Powered by lightweight YOLO nano architectures (`yolo11n.pt` / `yolo26n.pt`) running at fluid video framerates on consumer hardware.
+- **🙂 Live Face Detection**: OpenCV's bundled Haar cascade marks visible frontal faces in the camera HUD. This locates faces only; it does not identify or recognize people.
 - **🎯 Occlusion-Resistant Track Recovery**: A specialized motion- and trajectory-aware recovery mechanism restores dropped ByteTrack IDs during sudden camera rotations and brief occlusions without the overhead of heavy neural Re-ID models.
 - **🛡️ Flicker-Free Detection Stabilization**: Dual-layer temporal hysteresis holds missing tracks across brief gaps (up to 8 frames) and dampens transient class switches (requiring 3 consecutive consistent frames).
 - **🧭 2D Spatial Localization & Proximity Estimation**: Maps detections into a spatial 3x3 grid with fine-grained verbal directions (*"slightly right"*, *"upper center"*) and relative bounding-box area proximity scores (0.0 to 1.0).
@@ -110,6 +111,7 @@ VisionMate/
 ├── detection/                     # Vision & Tracking Subsystem
 │   ├── __init__.py                # Package exports
 │   ├── detector.py                # YOLO ObjectDetector inference wrapper
+│   ├── face_detector.py           # OpenCV Haar-cascade face bounding boxes (no identity recognition)
 │   ├── tracker.py                 # ByteTrack wrapper integration
 │   ├── recovery.py                # TrackRecoveryManager (velocity & IoU trajectory matching)
 │   └── stability.py               # TemporalDetectionStabilizer (hysteresis & smoothing)
@@ -142,6 +144,7 @@ VisionMate/
 |---|---|---|
 | **Language** | Python 3.8+ / 3.10+ | Core application runtime |
 | **Object Detection** | [Ultralytics YOLO](https://docs.ultralytics.com/) | Real-time edge inference on 80 COCO classes (`yolo11n` / `yolo26n`) |
+| **Face Detection** | OpenCV Haar cascade | Frontal face localization and HUD boxes; no face identification |
 | **Vision & GUI** | OpenCV (`cv2`) | Video stream capture, HUD rendering, high-contrast bounding boxes |
 | **Multi-Object Tracking** | ByteTrack | Two-stage association algorithm for robust trajectory tracking |
 | **Numeric Operations** | NumPy | Bounding box spatial computations, RMS audio energy filtering |
@@ -197,7 +200,7 @@ python app.py
 
 1. **Camera Initialization**: VisionMate automatically scans camera indices `0`, `1`, `2`, and `3` and connects to the first operational video device.
 2. **Audio Setup**: The speech announcer greets you: *"VisionMate is ready."*
-3. **Live HUD**: A camera window will open displaying detected objects, proximity indicators, recovery flags, and system status.
+3. **Live HUD**: A camera window will open displaying detected objects, frontal-face boxes, proximity indicators, recovery flags, and system status. Face boxes are not identity labels.
 
 ---
 
