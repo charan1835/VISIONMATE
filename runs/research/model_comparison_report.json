@@ -16,7 +16,7 @@
       },
       "precision": {
         "yolo11n": 0.6456,
-        "yolo26n": 0.7936,
+        "yolo26n": 0.8416,
         "diff": 0.148,
         "pct_change": 22.92
       },

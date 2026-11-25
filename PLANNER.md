@@ -57,7 +57,7 @@ A structured engineering roadmap and work breakdown structure for the **VisionMa
      - Label custom assistive video frames and perform QA to ensure tight, accurate bounding boxes.
   3. **Model Fine-Tuning & Transfer Learning**:
      - Fine-tune YOLO models (`yolo11n`, `yolo26n`) using PyTorch and Ultralytics on the curated dataset provided by Chiru's pipeline.
-     - Optimize training hyperparameters: learning rate schedulers, weight decay, anchor settings, loss balance (box, class, DFL).
+     - Optimize training hyperparameters: learning-rate schedule, weight decay, and loss balance (box, class, and DFL where supported by the selected model).
      - Prevent overfitting with frozen backbone layers and targeted fine-tuning on custom assistive classes.
   4. **Validation & Training Performance Tracking**:
      - Monitor training/validation loss curves, mAP@0.5, and mAP@0.5:0.95 across training epochs.
@@ -73,10 +73,10 @@ A structured engineering roadmap and work breakdown structure for the **VisionMa
   2. **Automated Data Pipeline & Augmentations**:
      - Build automated Python ingestion scripts (`datasets/scripts/prepare_data.py`) to process Shreya's raw collected datasets.
      - Implement assistive-specific data augmentations (simulated camera shake, illumination shifts, motion blur, partial synthetic occlusions) using Albumentations or OpenCV.
-     - Generate verified train/val/test splits (70% train, 20% val, 10% test) with zero frame leakage across sequential video frames.
+     - Generate verified train/val/test splits (70% train, 20% val, 10% test) by source video or capture session, preventing sequential-frame leakage across partitions.
   3. **Tracking Architecture Integration**:
      - Benchmark and configure ByteTrack parameters in `models/visionmate_bytetrack.yaml` (`track_high_thresh`, `track_low_thresh`, `match_thresh`, `track_buffer`).
-     - Coordinate with Charan to ensure tracker outputs match the recovery manager schema (`track_id`, `class_name`, `bbox`, `confidence`).
+     - Coordinate with Charan and add an adapter, if needed, so tracker outputs are normalized to the recovery manager schema (`track_id`, `class_name`, `bbox`, `confidence`).
   4. **Model Optimization & Edge Export**:
      - Take Shreya's fine-tuned model weights and export them to ONNX / OpenVINO / TensorRT for maximum inference FPS.
      - Evaluate INT8 / FP16 post-training quantization trade-offs for smooth execution on laptops or portable devices.
@@ -140,7 +140,7 @@ A structured engineering roadmap and work breakdown structure for the **VisionMa
 - **Shreya**: Retrain on targeted hard examples (low light, motion blur); perform hyperparameter sweeps; deliver finalized `best.pt`.
 - **Chiru**: Export Shreya's model to ONNX / OpenVINO; evaluate quantization (FP16/INT8); benchmark FPS and latency gains.
 - **Charan**: Connect optimized model into the voice assistant; expand natural language alias mapping and collision alert thresholds.
-> **Milestone 3**: Fine-tuned and optimized model running smoothly inside the voice-guided application at >25 FPS.
+> **Milestone 3**: Fine-tuned and optimized model running smoothly inside the voice-guided application at a measured target of >25 FPS on the agreed hardware, input resolution, and deployment backend.
 
 ---
 
